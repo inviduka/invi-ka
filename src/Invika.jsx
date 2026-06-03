@@ -155,7 +155,8 @@ TINGLISH STYLE — strictly follow:
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// OPENAI CALL — only provider, clean and simple
+// GROQ CALL — 100% FREE, no credit card, llama-3.3-70b
+// Get free key at console.groq.com — takes 30 seconds ra!
 // ─────────────────────────────────────────────────────────────────────────────
 async function callAI(history, prompt, apiKey) {
   if (!apiKey || !apiKey.trim()) throw new Error("NO_KEY");
@@ -163,14 +164,14 @@ async function callAI(history, prompt, apiKey) {
     { role:"system", content:prompt },
     ...history.map(m => ({ role:m.role, content:m.content }))
   ];
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method:"POST",
     headers:{
       "Content-Type":"application/json",
       "Authorization":`Bearer ${apiKey.trim()}`,
     },
     body: JSON.stringify({
-      model: "gpt-4o-mini",
+      model: "llama-3.3-70b-versatile",
       messages,
       max_tokens: 150,
       temperature: 0.85,
@@ -178,7 +179,7 @@ async function callAI(history, prompt, apiKey) {
   });
   if (!res.ok) {
     const e = await res.json().catch(()=>({}));
-    throw new Error(e.error?.message || `OpenAI HTTP ${res.status}`);
+    throw new Error(e.error?.message || `Groq HTTP ${res.status}`);
   }
   const d = await res.json();
   return d.choices?.[0]?.message?.content?.trim() || "Em antunnav ra?";
@@ -341,7 +342,7 @@ export default function Invika() {
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[msgs]);
 
   useEffect(()=>{
-    for(const p of["openai"]){
+    for(const p of["groq"]){
       const d=DB.getExpiry(p); if(!d) continue;
       const days=Math.ceil((new Date(d)-new Date())/86400000);
       if(days<=7){setExpModal({provider:p,days:Math.max(0,days)});break;}
@@ -412,7 +413,7 @@ export default function Invika() {
 
     // ── NO KEY CHECK
     if(!settingsR.current.apiKey?.trim()){
-      const reply=`Arey ${rnd(TITLES)}, OpenAI API key add cheyyi ra! Settings ki velthunna.`;
+      const reply=`Arey ${rnd(TITLES)}, Groq API key add cheyyi ra! Settings ki velthunna — console.groq.com lo free ga teyyi!`;
       addMsg("assistant",reply); setSpeaking(true);
       TTS.speak(reply,()=>{setSpeaking(false);});
       setTimeout(()=>setScreen("settings"),1200);
@@ -433,7 +434,7 @@ export default function Invika() {
       const is401   = err.message.includes("401")||err.message.toLowerCase().includes("invalid")||err.message.toLowerCase().includes("incorrect");
       const isQuota = err.message.includes("429")||err.message.toLowerCase().includes("quota")||err.message.toLowerCase().includes("rate");
       const errReply = isNoKey||is401
-        ? `Arey ${rnd(TITLES)}, OpenAI key wrong undi ra! Settings lo correct key paste cheyyi.`
+        ? `Arey ${rnd(TITLES)}, Groq key wrong undi ra! console.groq.com lo fresh key teyyi, settings lo paste cheyyi.`
         : isQuota
         ? `Aiyo ${rnd(TITLES)}, API rate limit hit aipoyindi ra. Oka minute wait cheyyi then try cheyyi!`
         : `Aiyo ${rnd(TITLES)}, connection issue ra. Check internet and try cheyyi!`;
@@ -517,35 +518,38 @@ export default function Invika() {
             onChange={e=>saveSetting({userName:e.target.value})}/>
         </Sec>
 
-        <Sec label="OpenAI API Key ⚡">
-          <div style={{fontSize:12,color:"#555",marginBottom:10,lineHeight:1.8,background:"rgba(255,255,255,0.03)",borderRadius:8,padding:"10px 12px"}}>
-            <b style={{color:"#aaa"}}>platform.openai.com</b> → API keys → Create new secret key → paste below ra.<br/>
-            <span style={{color:"#444",fontSize:11}}>GPT-4o-mini — very cheap, ~₹0.01 per response.</span>
+        <Sec label="Groq API Key 🆓 100% Free">
+          <div style={{fontSize:12,color:"#555",marginBottom:10,lineHeight:1.8,background:"rgba(0,229,160,0.04)",borderRadius:8,padding:"10px 12px",border:"1px solid rgba(0,229,160,0.1)"}}>
+            🆓 <b style={{color:"#00e5a0"}}>Groq is completely FREE ra!</b> No credit card needed.<br/>
+            <span style={{color:"#666"}}>1. Go to <b style={{color:"#aaa"}}>console.groq.com</b></span><br/>
+            <span style={{color:"#666"}}>2. Sign up with Google (30 seconds)</span><br/>
+            <span style={{color:"#666"}}>3. API Keys → Create API Key → copy</span><br/>
+            <span style={{color:"#666"}}>4. Paste below ra — done! 14,400 requests/day free 🚀</span>
           </div>
           <input style={{...S.inp,
             background:settings.apiKey?"rgba(0,229,160,0.05)":"rgba(255,100,100,0.06)",
             border:settings.apiKey?"1px solid rgba(0,229,160,0.25)":"1px solid rgba(255,100,100,0.3)",
             fontFamily:"monospace",fontSize:12}}
             type="password"
-            placeholder="sk-proj-... paste cheyyi ra"
+            placeholder="gsk_... paste cheyyi ra"
             value={settings.apiKey||""}
             onChange={e=>saveSetting({apiKey:e.target.value})}
           />
           <div style={{fontSize:11,marginTop:6,color:settings.apiKey?"#00e5a0":"#ff7070"}}>
-            {settings.apiKey?"✅ Key set undi ra — Invika ready!":"⚠️ Key ledu ra — add chesthe Invika work avutundi!"}
+            {settings.apiKey?"✅ Key set undi ra — Invika ready!":"⚠️ Key ledu ra — console.groq.com lo teyyi ra!"}
           </div>
         </Sec>
 
         <Sec label="API Key Expiry Alert">
-          <label style={S.lbl}>OpenAI key expires on</label>
-          <input style={S.inp} type="date" defaultValue={DB.getExpiry("openai")||""}
-            onChange={e=>DB.setExpiry("openai",e.target.value)}/>
+          <label style={S.lbl}>Groq key expires on</label>
+          <input style={S.inp} type="date" defaultValue={DB.getExpiry("groq")||""}
+            onChange={e=>DB.setExpiry("groq",e.target.value)}/>
         </Sec>
 
         <Sec label="About Invika">
           <div style={{fontSize:13,color:"#444",lineHeight:2}}>
             <div>Invika v1.0 — Tinglish AI Assistant</div>
-            <div>AI: OpenAI GPT-4o-mini</div>
+            <div>AI: Groq llama-3.3-70b (Free)</div>
             <div>Voice: Female en-IN (Tinglish)</div>
             <div>Agentic: search, navigate, launch</div>
           </div>
@@ -620,8 +624,8 @@ export default function Invika() {
               {expModal.days===0?"API Key Expired ra!":"Key Expire Avutundi!"}
             </div>
             <div style={{fontSize:13,color:"#777",lineHeight:1.8}}>
-              {expModal.days===0?`Aiyo ${rnd(TITLES)}, OpenAI key expire aipoyindi. Renew cheyyi!`
-                :`OpenAI key ${expModal.days} day${expModal.days===1?"":"s"} lo expire avutundi ${rnd(TITLES)}.`}
+              {expModal.days===0?`Aiyo ${rnd(TITLES)}, Groq key expire aipoyindi. console.groq.com lo renew cheyyi!`
+                :`Groq key ${expModal.days} day${expModal.days===1?"":"s"} lo expire avutundi ${rnd(TITLES)}.`}
             </div>
             <div style={{display:"flex",gap:10,marginTop:18}}>
               <button style={S.modalPrimary} onClick={()=>{setExpModal(null);setScreen("settings");}}>Settings ki Vellu</button>
@@ -634,7 +638,7 @@ export default function Invika() {
       {/* No key banner */}
       {!settings.apiKey&&(
         <div style={{background:"rgba(255,150,0,0.1)",borderBottom:"1px solid rgba(255,150,0,0.2)",padding:"7px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-          <span style={{fontSize:11,color:"#ffaa00"}}>⚡ OpenAI key ledu ra — Settings lo add cheyyi</span>
+          <span style={{fontSize:11,color:"#ffaa00"}}>🆓 Groq key ledu ra — console.groq.com lo free ga teyyi!</span>
           <button style={{background:"#ffaa00",border:"none",borderRadius:6,padding:"4px 11px",fontSize:11,fontWeight:700,color:"#000",cursor:"pointer",flexShrink:0}} onClick={()=>setScreen("settings")}>Add Key →</button>
         </div>
       )}
