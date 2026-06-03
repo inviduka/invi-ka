@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- Dark background -->
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#050a1a"/>
+      <stop offset="100%" stop-color="#020408"/>
+    </radialGradient>
+
+    <!-- Main infinity body gradient -->
+    <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00c6ff"/>
+      <stop offset="50%" stop-color="#0072ff"/>
+      <stop offset="100%" stop-color="#003acc"/>
+    </linearGradient>
+
+    <!-- Inner dark of the loops -->
+    <linearGradient id="innerDark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#020d2e"/>
+      <stop offset="100%" stop-color="#010818"/>
+    </linearGradient>
+
+    <!-- Pupil glow -->
+    <radialGradient id="pupilL" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="25%" stop-color="#7df9ff"/>
+      <stop offset="60%" stop-color="#00b4ff"/>
+      <stop offset="100%" stop-color="#0044cc" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="pupilR" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="25%" stop-color="#7df9ff"/>
+      <stop offset="60%" stop-color="#00b4ff"/>
+      <stop offset="100%" stop-color="#0044cc" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Outer glow filter -->
+    <filter id="outerGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="0 0 0 0 0   0 0.5 0.9 0 0   0 0 1 0 0   0 0 0 1.4 0" result="coloredBlur"/>
+      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Pupil glow filter -->
+    <filter id="pupilGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Subtle inner shadow on loops -->
+    <filter id="loopShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#001055" flood-opacity="0.8"/>
+    </filter>
+
+    <!-- Text glow -->
+    <filter id="textGlow" x="-20%" y="-60%" width="140%" height="220%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="0 0 0 0 0   0 0.6 1 0 0   0 0 1 0 0   0 0 0 1.2 0" result="coloredBlur"/>
+      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Clip for left eye -->
+    <clipPath id="leftEyeClip">
+      <ellipse cx="340" cy="390" rx="148" ry="95"/>
+    </clipPath>
+    <!-- Clip for right eye -->
+    <clipPath id="rightEyeClip">
+      <ellipse cx="684" cy="390" rx="148" ry="95"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" fill="url(#bgGrad)"/>
+
+  <!-- ── INFINITY SYMBOL ── -->
+  <!-- The infinity is two loops joined at center, drawn with thick paths -->
+  <g filter="url(#outerGlow)">
+
+    <!-- LEFT LOOP — outer body (thick stroke) -->
+    <ellipse cx="338" cy="390" rx="190" ry="125"
+      fill="none"
+      stroke="url(#bodyGrad)"
+      stroke-width="58"
+      stroke-linecap="round"/>
+
+    <!-- RIGHT LOOP — outer body -->
+    <ellipse cx="686" cy="390" rx="190" ry="125"
+      fill="none"
+      stroke="url(#bodyGrad)"
+      stroke-width="58"
+      stroke-linecap="round"/>
+
+    <!-- Center crossing band — covers join point with same color -->
+    <path d="M 460 340 Q 512 390 564 340 Q 512 430 460 480 Q 512 390 564 440 Q 512 350 460 340 Z"
+      fill="url(#bodyGrad)" opacity="0.0"/>
+
+    <!-- Crossover fix — redraw center to look like proper infinity cross -->
+    <path d="M 456 338 C 480 362 504 390 512 390 C 520 390 544 362 568 338"
+      fill="none" stroke="url(#bodyGrad)" stroke-width="58" stroke-linecap="round"/>
+    <path d="M 456 442 C 480 418 504 390 512 390 C 520 390 544 418 568 442"
+      fill="none" stroke="url(#bodyGrad)" stroke-width="58" stroke-linecap="round"/>
+
+    <!-- Inner dark fill of left loop -->
+    <ellipse cx="338" cy="390" rx="155" ry="88" fill="url(#innerDark)"/>
+    <!-- Inner dark fill of right loop -->
+    <ellipse cx="686" cy="390" rx="155" ry="88" fill="url(#innerDark)"/>
+
+    <!-- Left eye outline (almond shape) -->
+    <path d="M 200 390 Q 338 280 476 390 Q 338 500 200 390 Z"
+      fill="none" stroke="#1a6dcc" stroke-width="2.5" opacity="0.6"/>
+    <!-- Right eye outline -->
+    <path d="M 548 390 Q 686 280 824 390 Q 686 500 548 390 Z"
+      fill="none" stroke="#1a6dcc" stroke-width="2.5" opacity="0.6"/>
+
+    <!-- Left eye iris -->
+    <ellipse cx="338" cy="390" rx="52" ry="52" fill="#0055bb" filter="url(#loopShadow)"/>
+    <ellipse cx="338" cy="390" rx="52" ry="52" fill="#003399"/>
+    <!-- Left pupil glow -->
+    <ellipse cx="338" cy="390" rx="34" ry="34" fill="url(#pupilL)" filter="url(#pupilGlow)"/>
+    <ellipse cx="338" cy="390" rx="14" ry="14" fill="#aaf0ff"/>
+    <ellipse cx="338" cy="390" rx="6"  ry="6"  fill="#ffffff"/>
+    <!-- Left specular highlight -->
+    <ellipse cx="320" cy="374" rx="9" ry="6" fill="white" opacity="0.7" transform="rotate(-30 320 374)"/>
+
+    <!-- Right eye iris -->
+    <ellipse cx="686" cy="390" rx="52" ry="52" fill="#003399"/>
+    <!-- Right pupil glow -->
+    <ellipse cx="686" cy="390" rx="34" ry="34" fill="url(#pupilR)" filter="url(#pupilGlow)"/>
+    <ellipse cx="686" cy="390" rx="14" ry="14" fill="#aaf0ff"/>
+    <ellipse cx="686" cy="390" rx="6"  ry="6"  fill="#ffffff"/>
+    <!-- Right specular highlight -->
+    <ellipse cx="668" cy="374" rx="9" ry="6" fill="white" opacity="0.7" transform="rotate(-30 668 374)"/>
+  </g>
+
+  <!-- ── INVIKA TEXT ── -->
+  <text
+    x="512" y="640"
+    text-anchor="middle"
+    font-family="'Arial Black', 'Impact', sans-serif"
+    font-weight="900"
+    font-size="148"
+    letter-spacing="22"
+    fill="url(#bodyGrad)"
+    filter="url(#textGlow)">INVIKA</text>
+
+  <!-- Subtle bottom reflection of text -->
+  <text
+    x="512" y="640"
+    text-anchor="middle"
+    font-family="'Arial Black', 'Impact', sans-serif"
+    font-weight="900"
+    font-size="148"
+    letter-spacing="22"
+    fill="url(#bodyGrad)"
+    opacity="0.12"
+    transform="scale(1,-1) translate(0,-1340)">INVIKA</text>
+</svg>
