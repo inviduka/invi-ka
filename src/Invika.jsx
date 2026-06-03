@@ -108,7 +108,7 @@ async function callGemini(history, prompt, apiKey) {
   }
 
   // Try gemini-2.0-flash first (latest free model), fallback to gemini-1.5-flash
-  const models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest"];
+  const models = ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash-8b", "gemini-1.5-flash"];
   let lastError = null;
 
   for (const model of models) {
@@ -495,9 +495,12 @@ export default function Invika() {
     } catch (err) {
       setThinking(false);
       const isNoKey = err.message === "NO_KEY";
+      const isQuota = err.message.toLowerCase().includes("quota") || err.message.toLowerCase().includes("rate") || err.message.toLowerCase().includes("429");
       const errReply = isNoKey
         ? `Arey ${rnd(TITLES)}, API key set cheyyi ra! Settings ki velthunna — key add chesthe maat laadochu.`
-        : `Aiyo ${rnd(TITLES)}, connection issue ra: ${err.message}. Once more try cheyyi!`;
+        : isQuota
+        ? `Aiyo ${rnd(TITLES)}, API quota exceed aipoyindi ra! Gemini free tier limit hit aipoyindi. Oka minute wait cheyyi, then try cheyyi — or new key teyyi aistudio.google.com lo.`
+        : `Aiyo ${rnd(TITLES)}, connection issue ra. Once more try cheyyi!`;
       addMsg("assistant", errReply);
       TTS.speak(errReply, () => {
         setSpeaking(false);
