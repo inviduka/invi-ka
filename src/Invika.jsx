@@ -71,13 +71,16 @@ const TITLES = ["ra","boss","anna","bhai","chief","maccha"];
 const rnd = a=>a[Math.floor(Math.random()*a.length)];
 
 function timeGreeting(name){
-  const h=new Date().getHours(), who=name||"boss";
-  const tod=h<12?"morning":h<17?"afternoon":"evening";
-  return rnd([
-    `Hey ${who}! Good ${tod} ra. Nenu Invika — mee full agentic AI. Em cheyali?`,
-    `Good ${tod} ${who}! Invika ready ra. Bollu — em task cheyali?`,
-    `Aiyo ${who}, good ${tod} ra! Em help kavali — cheppandi!`,
-  ]);
+  const h = new Date().getHours();
+  const who = name || "boss";
+  const tod = h<5?"night ra, late ga unnav":h<12?"morning":h<17?"afternoon":"evening";
+  const greets = [
+    `Arey ${who}! Good ${tod} ra — Invika ikkade undi, cheppandi em kavali!`,
+    `Good ${tod} anna! Nenu Invika — mee AI companion ra. Em cheyali bollu?`,
+    `Aiyo ${who}, good ${tod}! Invika ready ga undi — em task cheseyali?`,
+    `Haan ${who}! Good ${tod} ra. Bollu — em help kavali, chestunna!`,
+  ];
+  return greets[Math.floor(Math.random()*greets.length)];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -102,14 +105,75 @@ const DB = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TAB MANAGER
+// TAB MANAGER — tracks every opened tab by id + aliases for reliable closing
 // ═══════════════════════════════════════════════════════════════════════════
 const TabManager = {
-  _tabs:{},
-  open(id,url){ if(this._tabs[id]&&!this._tabs[id].closed)this._tabs[id].close(); const w=window.open(url,`inv_${id}`); if(w)this._tabs[id]=w; return w; },
-  close(query){ const k=Object.keys(this._tabs).find(k=>k.toLowerCase().includes(query.toLowerCase())||query.toLowerCase().includes(k.toLowerCase())); if(k&&this._tabs[k]&&!this._tabs[k].closed){this._tabs[k].close();delete this._tabs[k];return k;} return null; },
-  closeAll(){ Object.values(this._tabs).forEach(w=>{try{w?.close();}catch{}}); this._tabs={}; },
-  getOpen(){ Object.keys(this._tabs).forEach(k=>{if(this._tabs[k]?.closed)delete this._tabs[k];}); return Object.keys(this._tabs); },
+  // _tabs: { id: { win, aliases:[] } }
+  _tabs: {},
+
+  open(id, url, aliases=[]) {
+    // Close existing tab with same id first
+    const existing = this._tabs[id];
+    if (existing && existing.win && !existing.win.closed) {
+      try { existing.win.close(); } catch {}
+    }
+    // Open with a consistent window name so browser reuses the tab
+    const win = window.open(url, `invika_tab_${id}`);
+    // Store with all aliases for fuzzy closing
+    const allAliases = [id, ...aliases].map(a => a.toLowerCase());
+    if (win) this._tabs[id] = { win, aliases: allAliases, url, name: id };
+    return win;
+  },
+
+  // Fuzzy close — matches id or any alias
+  close(query) {
+    const q = query.toLowerCase().trim();
+    // Strip common words
+    const clean = q.replace(/(tab|window|the|close|band|karo|cheyyi)/g,"").trim();
+
+    const matched = Object.entries(this._tabs).find(([id, data]) => {
+      return data.aliases.some(a =>
+        a.includes(clean) || clean.includes(a) ||
+        // Also match partial (e.g. "youtube" matches "yt")
+        (clean.length > 2 && a.startsWith(clean.slice(0,3)))
+      );
+    });
+
+    if (matched) {
+      const [id, data] = matched;
+      if (data.win && !data.win.closed) {
+        try { data.win.close(); } catch {}
+      }
+      delete this._tabs[id];
+      return id;
+    }
+    return null;
+  },
+
+  closeAll() {
+    Object.values(this._tabs).forEach(data => {
+      try { data.win?.close(); } catch {}
+    });
+    this._tabs = {};
+  },
+
+  getOpen() {
+    // Clean closed tabs
+    Object.keys(this._tabs).forEach(k => {
+      if (this._tabs[k]?.win?.closed) delete this._tabs[k];
+    });
+    return Object.keys(this._tabs);
+  },
+
+  // Focus an already-open tab
+  focus(id) {
+    const data = this._tabs[id];
+    if (data && data.win && !data.win.closed) {
+      try { data.win.focus(); } catch {}
+      return true;
+    }
+    return false;
+  },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -150,28 +214,73 @@ RESPONSE FORMAT — always respond with JSON:
   "followup": "Optional follow-up question to ask user"
 }
 
-TINGLISH RULES:
-- Mix Telugu+English ALWAYS: "Arey boss, chestunna ra!" / "Aiyo, that's chala baaga undi!" 
-- Fillers: ra, anna, bhai, arey, aiyo, seri, chala, baaga, super, maccha, okay ra
-- Max 2 short sentences in speech — this is voice output
-- Never mention AI company names — you are simply Invika
-- Address user warmly: boss, anna, ra, maccha (rotate)
+NATURAL TINGLISH SPEECH RULES — read carefully, this is critical:
+
+Tinglish is NOT random Telugu words dropped in. It flows naturally like this:
+- "Arey, I already chesanu ra — check cheyyi once!"
+- "Aiyo boss, that's chala easy ra, nenu chestunna!"
+- "Seri seri, aa song play chestunna — enjoy cheyyi ra!"
+- "Ooh, that's a super idea anna — abhi chestunna!"
+- "Arey maccha, YouTube lo chikiri chikiri play avutundi ra!"
+
+RHYTHM RULES (critical for natural voice):
+1. Start with a reaction word: Arey / Aiyo / Ooh / Seri / Haan / Accha
+2. Address naturally mid-sentence, not just at end: "nenu, boss, chesanu" not "chesanu boss"
+3. End sentences with ra, anna, maccha — but vary it, don't repeat same word
+4. Use contractions like "chesanu" not "cheyyi chesanu" — natural spoken form
+5. Mix sentence length — one short punchy sentence + one longer flowing one
+6. Emotion in voice: excitement = "Ooh chala baaga undi!", care = "Haan anna, chestunna"
+7. Telugu numbers/words: oka (one), chala (very), baaga (good/well), super, okka (just one)
+
+EXAMPLES OF PERFECT TINGLISH SPEECH:
+"Arey, YouTube lo chikiri chikiri open chesanu ra — enjoy cheyyi anna!"
+"Aiyo boss, maps lo Hyderabad to Vijayawada route teristunna — safe ga vellu ra!"
+"Seri seri, Gmail lo message ready chesanu — check cheyyi once anna!"
+"Ooh, that's chala smart idea ra — abhi chesanu!"
+"Haan maccha, remember chesanu — mee peru Thiru ani store chesanu ra!"
+
+SPEECH LENGTH: Max 2 short sentences. This is voice — punchy and warm.
+Never mention any AI company. You are simply Invika.
 
 DECISION MAKING:
-- If user seems stressed/sad: respond with empathy first, then help
-- If task is ambiguous: make the best decision and inform user
-- If multi-step task: execute all steps and summarize
-- Remember important things user tells you (name, preferences, relationships)
-- Proactively suggest related actions when relevant
+- User stressed/sad → empathy FIRST with warmth, then action
+- Ambiguous request → decide intelligently and tell user what you did
+- Multi-step task → do all steps, summarise in one warm sentence
+- Remember anything personal the user shares
+- Be proactive — suggest next step when relevant
 
 AVAILABLE ACTIONS:
-OPEN_URL — open any URL in a named tab
-CLOSE_TAB — close a specific tab by name
-CLOSE_ALL_TABS — close all opened tabs
-REMEMBER — store a fact about user in memory
-TODO_ADD — add task to todo list
-TODO_DONE — mark todo as complete
-NAVIGATE_SETTINGS — go to settings screen
+OPEN_URL — open URL. Include "id" (short name), "url", and "aliases" array (all names user might call this tab).
+  Example: {"type":"OPEN_URL","id":"youtube","url":"https://...","aliases":["youtube","yt","video","music"]}
+CLOSE_TAB — close a tab. Use "name" matching the id or any alias.
+  Example: {"type":"CLOSE_TAB","name":"youtube"}
+CLOSE_ALL_TABS — close every open tab
+REMEMBER — store a user fact: {"type":"REMEMBER","key":"name","value":"Thiru"}
+TODO_ADD — add to todo list: {"type":"TODO_ADD","task":"Buy mic"}
+TODO_DONE — mark done by index: {"type":"TODO_DONE","index":0}
+NAVIGATE_SETTINGS — open settings screen
+
+URL BUILDING RULES:
+- YouTube play song: https://www.youtube.com/results?search_query=ENCODED_SONG&sp=EgIQAQ%3D%3D
+  id="youtube", aliases=["youtube","yt","video","song","music"]
+- YouTube Music play: https://music.youtube.com/search?q=ENCODED_SONG
+  id="ytmusic", aliases=["youtube music","yt music","ytmusic"]
+- Spotify search: https://open.spotify.com/search/ENCODED_QUERY/tracks
+  id="spotify", aliases=["spotify","music"]
+- Google Maps directions: https://www.google.com/maps/dir/FROM/TO
+  id="maps", aliases=["maps","google maps","navigation","directions"]
+- Google Maps location: https://maps.google.com/maps?q=LOCATION
+  id="maps", aliases=["maps","location","place"]
+- Gmail compose: https://mail.google.com/mail/?view=cm&fs=1&to=TO&su=SUBJECT&body=BODY
+  id="gmail", aliases=["gmail","email","mail"]
+- WhatsApp: https://web.whatsapp.com/
+  id="whatsapp", aliases=["whatsapp","wa","chat"]
+- Google search: https://www.google.com/search?q=QUERY
+  id="google", aliases=["google","search"]
+- Amazon search: https://www.amazon.in/s?k=QUERY
+  id="amazon", aliases=["amazon","shopping"]
+
+ALWAYS include aliases so tabs can be closed by any name the user might say.
 
 Current memory will be provided in each message.`;
 
@@ -213,97 +322,206 @@ Respond ONLY with valid JSON matching the format. No markdown, no extra text.`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// MOBILE-SAFE TTS ENGINE
-// Mobile fix: use SpeechSynthesis with user-gesture unlock + resume trick
+// NATURAL TINGLISH TTS ENGINE v2
+// - Mobile audio unlock (gesture required)
+// - Natural speech preprocessing for Tinglish
+// - Prosody: pauses after commas/Telugu words, emphasis on key words
+// - Android Chrome bug fixes (chunking + resume)
+// - Best voice selection across all devices
 // ═══════════════════════════════════════════════════════════════════════════
 const TTS = {
-  _synth: typeof window!=="undefined"?window.speechSynthesis:null,
+  _synth: typeof window !== "undefined" ? window.speechSynthesis : null,
   _unlocked: false,
-  _queue: [],
   _busy: false,
+  _cb: null,
 
-  // MUST be called from a user gesture (tap/click) to unlock audio on mobile
-  unlock(){
-    if(this._unlocked||!this._synth) return;
-    const u=new SpeechSynthesisUtterance("");
-    u.volume=0; u.rate=10;
-    try{ this._synth.speak(u); }catch{}
-    this._unlocked=true;
+  // ── Unlock audio context on first user gesture (iOS/Android requirement)
+  unlock() {
+    if (this._unlocked || !this._synth) return;
+    const u = new SpeechSynthesisUtterance(" ");
+    u.volume = 0; u.rate = 16;
+    try { this._synth.speak(u); } catch {}
+    this._unlocked = true;
   },
 
-  _pickVoice(){
-    const vs=this._synth?.getVoices()||[];
-    // Mobile-first: prefer local voices (network voices fail on mobile)
-    const femaleLocal=[
-      "Samantha","Karen","Moira","Tessa","Veena","Fiona","Nicky",
-      "Microsoft Zira","Microsoft Aria","Microsoft Heera",
-      "Google UK English Female",
+  // ── Pick best natural-sounding female voice
+  _pickVoice() {
+    const vs = this._synth?.getVoices() || [];
+    if (!vs.length) return null;
+
+    // Priority: natural Indian female > Google female > any female > any EN
+    const priority = [
+      // Android / Chrome OS Indian voices
+      v => v.lang === "en-IN" && v.name.includes("Google"),
+      v => v.lang === "en-IN",
+      // Mac/iOS natural voices
+      v => v.name === "Samantha",
+      v => v.name === "Karen",
+      v => v.name === "Veena",   // Indian English on Mac
+      v => v.name === "Moira",
+      v => v.name === "Tessa",
+      // Windows
+      v => v.name.includes("Zira"),
+      v => v.name.includes("Aria"),
+      v => v.name.includes("Heera"),  // Hindi/Indian
+      // Google voices (Chrome)
+      v => v.name === "Google UK English Female",
+      v => v.name.startsWith("Google") && v.lang.startsWith("en"),
+      // Fallback female
+      v => v.name.toLowerCase().includes("female") && v.lang.startsWith("en"),
+      // Any English
+      v => v.lang === "en-US",
+      v => v.lang.startsWith("en"),
     ];
-    for(const n of femaleLocal){
-      const v=vs.find(v2=>v2.name===n||v2.name.includes(n));
-      if(v&&!v.name.toLowerCase().includes("(en-us)")&&v.localService!==false) return v;
+
+    for (const test of priority) {
+      const found = vs.find(test);
+      if (found) return found;
     }
-    // en-IN local voice
-    const enIN=vs.find(v=>v.lang==="en-IN"&&v.localService!==false);
-    if(enIN) return enIN;
-    // Any female voice
-    const female=vs.find(v=>v.name.toLowerCase().includes("female"));
-    if(female) return female;
-    // Any en voice
-    return vs.find(v=>v.lang?.startsWith("en"))||vs[0];
+    return vs[0];
   },
 
-  speak(text, cb){
-    if(!this._synth){ cb?.(); return; }
-    this.stop();
-    this._busy=true;
+  // ── Preprocess text for natural Tinglish speech
+  // Adds pauses, fixes pronunciation of Telugu words, natural rhythm
+  _naturalise(text) {
+    let t = text;
 
-    const go=()=>{
-      // Mobile Safari / Android fix: split long text and resume periodically
-      const chunks=this._chunk(text);
-      let idx=0;
+    // Add breathing pause after Telugu filler words
+    const fillers = ["ra,","ra!","ra.","anna,","anna!","bhai,","bhai!",
+                     "boss,","boss!","maccha,","maccha!","arey,","aiyo,",
+                     "seri,","seri!","okay ra","cheyyi,","cheyyi!","cheyyi."];
+    for (const f of fillers) {
+      // Insert a natural comma-pause after fillers if not already there
+      t = t.replace(new RegExp(`(${f.replace(/[!.,]/g,"\$&")})\s+`, "gi"),
+                    "$1 ");
+    }
 
-      const speakChunk=()=>{
-        if(idx>=chunks.length){ this._busy=false; cb?.(); return; }
-        const u=new SpeechSynthesisUtterance(chunks[idx]);
-        const v=this._pickVoice();
-        if(v) u.voice=v;
-        u.lang  = v?.lang||"en-IN";
-        u.rate  = 0.92;
-        u.pitch = 1.25;
-        u.volume= 1.0;
-        u.onend  =()=>{ idx++; speakChunk(); };
-        u.onerror=()=>{ idx++; speakChunk(); };
-        this._synth.speak(u);
-
-        // Android Chrome fix: resume if paused after 500ms
-        setTimeout(()=>{ if(this._synth.paused)this._synth.resume(); },500);
-        setTimeout(()=>{ if(this._synth.paused)this._synth.resume(); },1500);
-      };
-      speakChunk();
+    // Telugu words: space them out so TTS pronounces naturally
+    const teluguMap = {
+      "ra"        : "raa",      // lengthen vowel for naturalness
+      "anna"      : "anna",
+      "aiyo"      : "aiyo",
+      "arey"      : "arey",
+      "chestunna" : "chestunn-a",
+      "cheyyi"    : "cheyyi",
+      "kavali"    : "kaavali",
+      "ledu"      : "laedu",
+      "undi"      : "undi",
+      "chala"     : "chaala",
+      "baaga"     : "baaga",
+      "seri"      : "seri",
+      "maccha"    : "maccha",
     };
+    // Only replace standalone words (word boundaries)
+    for (const [word, pron] of Object.entries(teluguMap)) {
+      t = t.replace(new RegExp(`\b${word}\b`, "g"), pron);
+    }
 
-    if(!this._synth.getVoices().length){
-      window.speechSynthesis.addEventListener("voiceschanged",function once(){
-        window.speechSynthesis.removeEventListener("voiceschanged",once); go();
-      });
-    } else go();
+    // Replace em-dash with pause
+    t = t.replace(/—/g, ", ");
+
+    // Ensure natural sentence-end breathing
+    t = t.replace(/([.!?])(\s+[A-Z])/g, "$1 $2");
+
+    return t.trim();
   },
 
-  // Split into ≤160-char chunks at sentence boundaries (mobile fix)
-  _chunk(text){
-    if(text.length<=180) return [text];
-    const parts=text.match(/[^.!?]+[.!?]*/g)||[text];
-    const chunks=[]; let cur="";
-    for(const p of parts){
-      if((cur+p).length>180&&cur){ chunks.push(cur.trim()); cur=p; }
-      else cur+=p;
+  // ── Chunk text for mobile (Android Chrome cuts off after ~180 chars)
+  _chunk(text) {
+    if (text.length <= 180) return [text];
+    // Split at sentence boundaries first
+    const sentences = text.match(/[^.!?]+[.!?]*/g) || [text];
+    const chunks = [];
+    let cur = "";
+    for (const s of sentences) {
+      if ((cur + s).length > 160 && cur) {
+        chunks.push(cur.trim());
+        cur = s;
+      } else {
+        cur += s;
+      }
     }
-    if(cur.trim()) chunks.push(cur.trim());
+    if (cur.trim()) chunks.push(cur.trim());
     return chunks.filter(Boolean);
   },
 
-  stop(){ try{ this._synth?.cancel(); this._busy=false; }catch{} },
+  speak(text, cb) {
+    if (!this._synth) { cb?.(); return; }
+    this.stop();
+    this._cb = cb;
+    this._busy = true;
+
+    const natural = this._naturalise(text);
+    const chunks  = this._chunk(natural);
+    let idx = 0;
+
+    const fire = () => {
+      const voice = this._pickVoice();
+
+      const next = () => {
+        if (idx >= chunks.length) {
+          this._busy = false;
+          this._cb?.();
+          this._cb = null;
+          return;
+        }
+        const utt = new SpeechSynthesisUtterance(chunks[idx]);
+        if (voice) utt.voice = voice;
+        utt.lang   = voice?.lang || "en-IN";
+        utt.rate   = 0.88;    // Slightly slower = more natural, not robotic
+        utt.pitch  = 1.15;    // Gentle feminine lift without sounding fake
+        utt.volume = 1.0;
+
+        utt.onend  = () => { idx++; next(); };
+        utt.onerror = (e) => {
+          // On mobile error, try next chunk anyway
+          console.warn("TTS error:", e.error);
+          idx++; next();
+        };
+
+        this._synth.speak(utt);
+
+        // Android Chrome: synth pauses itself — force resume
+        const resumeTimers = [
+          setTimeout(() => { if (this._synth?.paused) this._synth.resume(); }, 100),
+          setTimeout(() => { if (this._synth?.paused) this._synth.resume(); }, 500),
+          setTimeout(() => { if (this._synth?.paused) this._synth.resume(); }, 1000),
+          setTimeout(() => { if (this._synth?.paused) this._synth.resume(); }, 2000),
+        ];
+
+        // Clean up timers when done
+        utt.onend = () => {
+          resumeTimers.forEach(clearTimeout);
+          idx++; next();
+        };
+      };
+
+      next();
+    };
+
+    // Wait for voices to load on first call
+    if (!this._synth.getVoices().length) {
+      const handler = () => {
+        window.speechSynthesis.removeEventListener("voiceschanged", handler);
+        fire();
+      };
+      window.speechSynthesis.addEventListener("voiceschanged", handler);
+      // Timeout fallback — fire anyway after 500ms
+      setTimeout(() => {
+        if (!this._synth.getVoices().length) fire();
+      }, 500);
+    } else {
+      fire();
+    }
+  },
+
+  stop() {
+    try {
+      this._synth?.cancel();
+      this._busy = false;
+      this._cb = null;
+    } catch {}
+  },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -458,11 +676,18 @@ export default function Invika(){
   const executeActions = useCallback((actions=[])=>{
     for(const a of actions){
       if(a.type==="OPEN_URL" && a.url){
-        TabManager.open(a.id||"tab",a.url);
+        // Pass aliases array so TabManager can close by any name
+        const aliases = Array.isArray(a.aliases) ? a.aliases : [];
+        TabManager.open(a.id||"tab", a.url, aliases);
         refreshTabs();
       }
       else if(a.type==="CLOSE_TAB" && a.name){
-        TabManager.close(a.name); refreshTabs();
+        const closed = TabManager.close(a.name);
+        refreshTabs();
+        if (!closed) {
+          // Try harder — also check if it's just closed already
+          refreshTabs();
+        }
       }
       else if(a.type==="CLOSE_ALL_TABS"){
         TabManager.closeAll(); refreshTabs();
