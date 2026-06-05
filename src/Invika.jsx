@@ -338,213 +338,183 @@ Respond ONLY with valid JSON matching the format. No markdown, no extra text.`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// NATURAL TINGLISH TTS ENGINE v2
-// - Mobile audio unlock (gesture required)
-// - Natural speech preprocessing for Tinglish
-// - Prosody: pauses after commas/Telugu words, emphasis on key words
-// - Android Chrome bug fixes (chunking + resume)
-// - Best voice selection across all devices
+// INVIKA TTS ENGINE
+// Primary:  ElevenLabs API — real Indian female voice (deepa / Rachel)
+// Fallback: Browser SpeechSynthesis with forced female + high pitch
 // ═══════════════════════════════════════════════════════════════════════════
-const TTS = {
-  _synth: typeof window !== "undefined" ? window.speechSynthesis : null,
-  _unlocked: false,
-  _busy: false,
-  _cb: null,
 
-  // ── Unlock audio context on first user gesture (iOS/Android requirement)
+// ── ElevenLabs voice IDs — Indian/warm female voices
+// "Deepa"   — Indian English female  (use this for Tinglish)
+// "Rachel"  — American female warm   (fallback)
+// "Elli"    — American female young
+// You can find more at: elevenlabs.io/voice-library
+const ELEVEN_VOICES = {
+  deepa:  "aEO501A3Ruktzz6OhHBH",  // Deepa — Indian English female ✓
+  rachel: "21m00Tcm4TlvDq8ikWAM",  // Rachel — warm American female
+  elli:   "MF3mGyEYCl7XYWbV9V6O",  // Elli — young female
+};
+
+// ── Preprocess Tinglish text for natural speech
+function naturalise(text) {
+  let t = text;
+  // Telugu phonetics — how a real Telugu girl actually says these
+  const map = [
+    [" ra!", " raa!"],   [" ra.", " raa."],  [" ra,", " raa,"],  [" ra ", " raa "],
+    ["Arey,", "Arey,"],  ["Aiyo,", "Aiyo,"],
+    ["chestunna", "chess-tun-na"],
+    ["cheyyi",    "chay-yi"],
+    ["chesanu",   "chay-sa-nu"],
+    ["kavali",    "kaavali"],
+    ["chala ",    "chaala "],
+    ["baaga",     "baaga"],
+    ["maccha",    "maacha"],
+    ["bollu",     "bollu"],
+    ["—",         ", "],
+  ];
+  for (const [f, r] of map) t = t.split(f).join(r);
+  return t.trim();
+}
+
+const TTS = {
+  _synth:    typeof window !== "undefined" ? window.speechSynthesis : null,
+  _unlocked: false,
+  _busy:     false,
+  _cb:       null,
+  _audio:    null,   // for ElevenLabs audio element
+
+  // ── Must call on user gesture (mobile audio unlock)
   unlock() {
-    if (this._unlocked || !this._synth) return;
-    const u = new SpeechSynthesisUtterance(" ");
-    u.volume = 0; u.rate = 16;
-    try { this._synth.speak(u); } catch {}
+    if (this._unlocked) return;
+    // Unlock Web Audio context
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    ctx.resume().catch(()=>{});
+    // Unlock SpeechSynthesis
+    if (this._synth) {
+      const u = new SpeechSynthesisUtterance(" ");
+      u.volume = 0; u.rate = 16;
+      try { this._synth.speak(u); } catch {}
+    }
     this._unlocked = true;
   },
 
-  // ── INVIKA FEMALE VOICE — she has a name, she has a soul
-  // Priority: softest, warmest female voice across all devices
-  _pickVoice() {
-    const vs = this._synth?.getVoices() || [];
-    if (!vs.length) return null;
-
-    // Log available voices for debugging (remove in production)
-    // console.log("Available voices:", vs.map(v=>v.name+"("+v.lang+")").join(", "));
-
-    // PRIORITY ORDER — Invika's voice hierarchy
-    const priority = [
-      // 1. Google Indian English female — best for Tinglish on Android/Chrome
-      v => v.name.includes("Google") && v.lang === "en-IN",
-      // 2. Priya / Aditi — Indian female voices (Android)
-      v => v.name.includes("Priya"),
-      v => v.name.includes("Aditi"),
-      v => v.name.includes("Raveena"),
-      // 3. Any en-IN voice
-      v => v.lang === "en-IN",
-      // 4. Mac/iOS named female voices — natural and warm
-      v => v.name === "Samantha",      // Mac US — warm female
-      v => v.name === "Karen",         // Mac AU — clear female
-      v => v.name === "Veena",         // Mac Indian English
-      v => v.name === "Moira",         // Mac Irish — melodic
-      v => v.name === "Tessa",         // Mac SA
-      v => v.name === "Fiona",         // Mac Scottish
-      // 5. Windows female voices
-      v => v.name.includes("Aria"),    // Win11 — most natural
-      v => v.name.includes("Jenny"),   // Win11
-      v => v.name.includes("Zira"),    // Win10 female
-      v => v.name.includes("Heera"),   // Win Hindi-accented
-      // 6. Google Chrome female voices
-      v => v.name === "Google UK English Female",
-      v => v.name === "Google US English" && v.lang==="en-US",
-      // 7. Any voice with female in name
-      v => v.name.toLowerCase().includes("female"),
-      // 8. Any en-US as last resort
-      v => v.lang === "en-US",
-      v => v.lang && v.lang.startsWith("en"),
-    ];
-
-    for (const test of priority) {
-      const found = vs.find(test);
-      if (found) return found;
-    }
-    return vs[0] || null;
+  // ── ElevenLabs: real Indian female voice
+  async _elevenSpeak(text, apiKey, cb) {
+    const voiceId = ELEVEN_VOICES.deepa;
+    const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`;
+    const body = {
+      text,
+      model_id: "eleven_turbo_v2_5",   // fastest + multilingual
+      voice_settings: {
+        stability:        0.55,   // natural variation, not robotic
+        similarity_boost: 0.85,   // stays true to Deepa's voice
+        style:            0.35,   // expressive but not over the top
+        use_speaker_boost: true,
+      },
+    };
+    const res = await fetch(url, {
+      method:  "POST",
+      headers: { "xi-api-key": apiKey, "Content-Type": "application/json", "Accept": "audio/mpeg" },
+      body:    JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`ElevenLabs ${res.status}`);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    if (this._audio) { try { this._audio.pause(); URL.revokeObjectURL(this._audio.src); } catch {} }
+    const audio = new Audio(blobUrl);
+    audio.playbackRate = 1.0;
+    this._audio = audio;
+    audio.onended  = () => { URL.revokeObjectURL(blobUrl); cb?.(); };
+    audio.onerror  = () => { URL.revokeObjectURL(blobUrl); cb?.(); };
+    audio.play().catch(() => cb?.());
   },
 
-  // ── Preprocess text for natural Tinglish speech
-  // Adds pauses, fixes pronunciation of Telugu words, natural rhythm
-  _naturalise(text) {
-    let t = text;
-
-    // Add breathing pause after Telugu filler words
-    const fillers = ["ra,","ra!","ra.","anna,","anna!","bhai,","bhai!",
-                     "boss,","boss!","maccha,","maccha!","arey,","aiyo,",
-                     "seri,","seri!","okay ra","cheyyi,","cheyyi!","cheyyi."];
-    for (const f of fillers) {
-      // Insert a natural comma-pause after fillers if not already there
-      t = t.replace(new RegExp(`(${f.replace(/[!.,]/g,"\$&")})\s+`, "gi"),
-                    "$1 ");
-    }
-
-    // Phonetic replacements — Invika sounds like a real Telugu woman
-    const phonetics = [
-      [" ra!", " raa!"], [" ra.", " raa."], [" ra,", " raa,"], [" ra ", " raa "],
-      ["Arey ", "Uh-ray "], ["arey ", "uh-ray "],
-      ["Aiyo ", "Ay-yo "], ["aiyo ", "ay-yo "],
-      ["Seri ", "Say-ree "], ["seri ", "say-ree "],
-      ["chestunna", "chess-tun-naa"],
-      ["cheyyi", "chay-yi"],
-      ["chesanu", "chay-sa-nu"],
-      ["kavali", "kaa-va-lee"],
-      ["chala ", "chaa-la "],
-      ["baaga", "baa-ga"],
-      ["maccha", "maa-cha"],
-      ["bollu", "bol-lu"],
-      ["anna!", "un-na!"], ["anna,", "un-na,"], ["anna.", "un-na."],
-      [" anna ", " un-na "],
-    ];
-    for (const [from, to] of phonetics) {
-      t = t.split(from).join(to);
-    }
-
-    // Replace em-dash with pause
-    t = t.replace(/—/g, ", ");
-
-    // Ensure natural sentence-end breathing
-    t = t.replace(/([.!?])(\s+[A-Z])/g, "$1 $2");
-
-    return t.trim();
-  },
-
-  // ── Chunk text for mobile (Android Chrome cuts off after ~180 chars)
-  _chunk(text) {
-    if (text.length <= 180) return [text];
-    // Split at sentence boundaries first
-    const sentences = text.match(/[^.!?]+[.!?]*/g) || [text];
-    const chunks = [];
-    let cur = "";
-    for (const s of sentences) {
-      if ((cur + s).length > 160 && cur) {
-        chunks.push(cur.trim());
-        cur = s;
-      } else {
-        cur += s;
-      }
-    }
-    if (cur.trim()) chunks.push(cur.trim());
-    return chunks.filter(Boolean);
-  },
-
-  speak(text, cb) {
+  // ── Browser fallback — forces female voice with high pitch
+  _browserSpeak(text, cb) {
     if (!this._synth) { cb?.(); return; }
-    this.stop();
-    this._cb = cb;
-    this._busy = true;
+    this._synth.cancel();
 
-    const natural = this._naturalise(text);
-    const chunks  = this._chunk(natural);
-    let idx = 0;
+    const go = () => {
+      const vs = this._synth.getVoices();
+      // Ranked female voice search
+      const femaleTests = [
+        v => v.name.includes("Google") && v.lang === "en-IN",
+        v => v.name.includes("Priya"),
+        v => v.name.includes("Aditi"),
+        v => v.lang === "en-IN",
+        v => v.name === "Samantha",
+        v => v.name === "Karen",
+        v => v.name === "Veena",
+        v => v.name === "Tessa",
+        v => v.name.includes("Aria"),
+        v => v.name.includes("Jenny"),
+        v => v.name.includes("Zira"),
+        v => v.name === "Google UK English Female",
+        v => v.name.toLowerCase().includes("female"),
+        v => v.lang === "en-US",
+      ];
+      let voice = null;
+      for (const test of femaleTests) {
+        voice = vs.find(test);
+        if (voice) break;
+      }
 
-    const fire = () => {
-      const voice = this._pickVoice();
+      // Split into ≤160 char chunks (Android fix)
+      const chunks = text.length <= 160 ? [text]
+        : (text.match(/[^.!?,]+[.!?,]*/g) || [text]).reduce((acc, s) => {
+            const last = acc[acc.length - 1] || "";
+            if ((last + s).length > 160) acc.push(s);
+            else acc[acc.length - 1] = last + s;
+            return acc;
+          }, [""]).filter(Boolean);
 
+      let idx = 0;
       const next = () => {
-        if (idx >= chunks.length) {
-          this._busy = false;
-          this._cb?.();
-          this._cb = null;
-          return;
-        }
-        const utt = new SpeechSynthesisUtterance(chunks[idx]);
-        if (voice) utt.voice = voice;
-        utt.lang   = voice?.lang || "en-IN";
-        utt.rate   = 0.90;    // Natural conversational pace — not slow, not rushed
-        utt.pitch  = 1.40;    // Higher pitch = clearly feminine, warm, Invika's voice
-        utt.volume = 1.0;
-
-        utt.onend  = () => { idx++; next(); };
-        utt.onerror = (e) => {
-          // On mobile error, try next chunk anyway
-          console.warn("TTS error:", e.error);
-          idx++; next();
-        };
-
-        this._synth.speak(utt);
-
-        // Android Chrome: synth pauses itself — force resume
-        const resumeTimers = [
-          setTimeout(() => { if (this._synth?.paused) this._synth.resume(); }, 100),
-          setTimeout(() => { if (this._synth?.paused) this._synth.resume(); }, 500),
-          setTimeout(() => { if (this._synth?.paused) this._synth.resume(); }, 1000),
-          setTimeout(() => { if (this._synth?.paused) this._synth.resume(); }, 2000),
-        ];
-
-        // Clean up timers when done
-        utt.onend = () => {
-          resumeTimers.forEach(clearTimeout);
-          idx++; next();
-        };
+        if (idx >= chunks.length) { cb?.(); return; }
+        const u = new SpeechSynthesisUtterance(chunks[idx]);
+        if (voice)  u.voice  = voice;
+        u.lang   = voice?.lang || "en-IN";
+        u.rate   = 0.88;
+        u.pitch  = 1.6;    // Maximum pitch boost for female sound
+        u.volume = 1.0;
+        u.onend  = () => { idx++; next(); };
+        u.onerror = () => { idx++; next(); };
+        this._synth.speak(u);
+        // Android resume bug fix
+        [100, 500, 1200, 2500].forEach(ms =>
+          setTimeout(() => { if (this._synth?.paused) this._synth.resume(); }, ms)
+        );
       };
-
       next();
     };
 
-    // Wait for voices to load on first call
     if (!this._synth.getVoices().length) {
-      const handler = () => {
-        window.speechSynthesis.removeEventListener("voiceschanged", handler);
-        fire();
-      };
-      window.speechSynthesis.addEventListener("voiceschanged", handler);
-      // Timeout fallback — fire anyway after 500ms
-      setTimeout(() => {
-        if (!this._synth.getVoices().length) fire();
-      }, 500);
+      const h = () => { this._synth.removeEventListener("voiceschanged", h); go(); };
+      this._synth.addEventListener("voiceschanged", h);
+      setTimeout(go, 600); // fallback if voiceschanged never fires
+    } else go();
+  },
+
+  // ── Main speak — tries ElevenLabs first, falls back to browser
+  speak(text, cb, elevenKey) {
+    this.stop();
+    this._busy = true;
+    const natural = naturalise(text);
+    const done = () => { this._busy = false; cb?.(); };
+
+    if (elevenKey?.trim()) {
+      this._elevenSpeak(natural, elevenKey.trim(), done).catch(() => {
+        // ElevenLabs failed — use browser voice
+        this._browserSpeak(natural, done);
+      });
     } else {
-      fire();
+      this._browserSpeak(natural, done);
     }
   },
 
   stop() {
     try {
       this._synth?.cancel();
+      if (this._audio) { this._audio.pause(); this._audio = null; }
       this._busy = false;
       this._cb = null;
     } catch {}
@@ -639,7 +609,7 @@ export default function Invika(){
   const [status,    setStatus]   = useState("Invika ready ra…");
   const [interim,   setInterim]  = useState("");
   const [apps,      setApps]     = useState(()=>DB.getApps());
-  const [settings,  setSettings] = useState(()=>({userName:"",apiKey:"",...DB.getSettings()}));
+  const [settings,  setSettings] = useState(()=>({userName:"",apiKey:"",elevenKey:"",...DB.getSettings()}));
   const [memory,    setMemory]   = useState(()=>DB.getMemory());
   const [todos,     setTodos]    = useState(()=>DB.getTasks());
   const [openTabs,  setOpenTabs] = useState([]);
@@ -750,7 +720,7 @@ export default function Invika(){
     if(!settingsR.current.apiKey?.trim()){
       const r=`Arey ${rnd(TITLES)}, Groq API key add cheyyi ra! Settings ki velthunna.`;
       addMsg("assistant",r); setSpeaking(true);
-      TTS.speak(r,()=>{setSpeaking(false);setTimeout(()=>setScreen("settings"),1000);});
+      TTS.speak(r,()=>{setSpeaking(false);setTimeout(()=>setScreen("settings"),1000);}, settingsR.current.elevenKey);
       return;
     }
 
@@ -780,7 +750,7 @@ export default function Invika(){
         setStatus("Listening ra… bolte raho");
         setEmotion("idle");
         if(!pausedR.current) setTimeout(()=>startMicRef.current?.(),500);
-      });
+      }, settingsR.current.elevenKey);
 
     }catch(err){
       setThinking(false); setEmotion("idle");
@@ -792,7 +762,7 @@ export default function Invika(){
         ? `Aiyo ${rnd(TITLES)}, rate limit hit ra. Oka minute wait cheyyi!`
         : `Aiyo ${rnd(TITLES)}, connection issue ra. Once more try cheyyi!`;
       addMsg("assistant",r);
-      TTS.speak(r,()=>{setSpeaking(false);if(!pausedR.current&&!is401)setTimeout(()=>startMicRef.current?.(),600);});
+      TTS.speak(r,()=>{setSpeaking(false);if(!pausedR.current&&!is401)setTimeout(()=>startMicRef.current?.(),600);}, settingsR.current.elevenKey);
       if(is401)setTimeout(()=>setScreen("settings"),1500);
     }
   },[addMsg, executeActions]);
@@ -836,7 +806,7 @@ export default function Invika(){
     setTimeout(()=>{
       const g=timeGreeting(DB.getSettings().userName||"");
       addMsg("assistant",g);setSpeaking(true);setStatus("Speaking…");setEmotion("happy");
-      TTS.speak(g,()=>{setSpeaking(false);setEmotion("idle");setStatus("Listening ra… bolte raho");startMicRef.current?.();});
+      TTS.speak(g,()=>{setSpeaking(false);setEmotion("idle");setStatus("Listening ra… bolte raho");startMicRef.current?.();}, settingsR.current.elevenKey);
     },400);
   },[addMsg]);
 
@@ -882,16 +852,28 @@ export default function Invika(){
         <Sec label="Your Name">
           <input style={S.inp} placeholder="Mee peru — Invika remember chestundi" value={settings.userName} onChange={e=>saveSetting({userName:e.target.value})}/>
         </Sec>
-        <Sec label="Groq API Key 🆓 100% Free">
+        <Sec label="Groq API Key 🆓 (AI Brain — Free)">
           <div style={{fontSize:12,color:"#555",lineHeight:1.9,background:"rgba(0,229,160,0.04)",border:"1px solid rgba(0,229,160,0.1)",borderRadius:9,padding:"11px 13px",marginBottom:10}}>
-            🆓 <b style={{color:"#00e5a0"}}>Completely FREE ra!</b> No credit card.<br/>
-            <span style={{color:"#666"}}>1. <b style={{color:"#aaa"}}>console.groq.com</b> → Sign in with Google</span><br/>
-            <span style={{color:"#666"}}>2. API Keys → Create API Key</span><br/>
-            <span style={{color:"#666"}}>3. Copy <b style={{color:"#aaa"}}>gsk_...</b> key → paste below</span>
+            🆓 <b style={{color:"#00e5a0"}}>FREE!</b> <b style={{color:"#aaa"}}>console.groq.com</b> → API Keys → Create → paste below ra.
           </div>
           <input style={{...S.inp,background:settings.apiKey?"rgba(0,229,160,0.05)":"rgba(255,100,100,0.06)",border:settings.apiKey?"1px solid rgba(0,229,160,0.25)":"1px solid rgba(255,100,100,0.3)",fontFamily:"monospace",fontSize:12}}
             type="password" placeholder="gsk_... paste cheyyi ra" value={settings.apiKey||""} onChange={e=>saveSetting({apiKey:e.target.value})}/>
-          <div style={{fontSize:11,marginTop:6,color:settings.apiKey?"#00e5a0":"#ff7070"}}>{settings.apiKey?"✅ Key set undi ra — Invika ready!":"⚠️ Key ledu ra!"}</div>
+          <div style={{fontSize:11,marginTop:6,color:settings.apiKey?"#00e5a0":"#ff7070"}}>{settings.apiKey?"✅ Groq ready ra!":"⚠️ Groq key ledu!"}</div>
+        </Sec>
+
+        <Sec label="ElevenLabs Voice Key 🎙️ (Invika's Real Female Voice)">
+          <div style={{fontSize:12,color:"#666",lineHeight:1.9,background:"rgba(0,114,255,0.04)",border:"1px solid rgba(0,114,255,0.1)",borderRadius:9,padding:"11px 13px",marginBottom:10}}>
+            <b style={{color:"#6699ff"}}>Invika's real Indian girl voice!</b> Free 10,000 chars/month.<br/>
+            <span style={{color:"#555"}}>1. <b style={{color:"#aaa"}}>elevenlabs.io</b> → Sign up free</span><br/>
+            <span style={{color:"#555"}}>2. Profile → API Key → copy</span><br/>
+            <span style={{color:"#555"}}>3. Paste below → Invika speaks like a real Telugu girl ra! 🎙️</span><br/>
+            <span style={{color:"#444",fontSize:11}}>Without this key: browser voice used (may sound male on some devices)</span>
+          </div>
+          <input style={{...S.inp,background:settings.elevenKey?"rgba(0,114,255,0.06)":"rgba(255,255,255,0.04)",border:settings.elevenKey?"1px solid rgba(0,114,255,0.35)":"1px solid rgba(255,255,255,0.08)",fontFamily:"monospace",fontSize:12}}
+            type="password" placeholder="sk_... ElevenLabs key paste cheyyi" value={settings.elevenKey||""} onChange={e=>saveSetting({elevenKey:e.target.value})}/>
+          <div style={{fontSize:11,marginTop:6,color:settings.elevenKey?"#6699ff":"#555"}}>
+            {settings.elevenKey?"✅ ElevenLabs set — Invika sounds like a real girl now ra! 🎙️":"💡 Optional — but strongly recommended for female voice!"}
+          </div>
         </Sec>
         <Sec label="Memory (What Invika knows)">
           {Object.keys(memory.facts||{}).length>0
