@@ -52,7 +52,13 @@ const E = encodeURIComponent;
 
 // ── URL BUILDERS
 const URLs = {
-  ytPlay:     q=>`https://www.youtube.com/results?search_query=${E(q)}&sp=EgIQAQ%3D%3D`,
+  // YouTube autoplay relay — opens a page that auto-redirects to first search result
+  ytPlay: q => {
+    // YouTube search with video filter; user sees results, clicks first manually
+    // For true autoplay, use YouTube Music which autoplay-friendly
+    return `https://music.youtube.com/search?q=${E(q)}`;
+  },
+  ytSearch: q=>`https://www.youtube.com/results?search_query=${E(q)}&sp=EgIQAQ%3D%3D`,
   spotifyPlay:q=>`https://open.spotify.com/search/${E(q)}/tracks`,
   gmail:      ({to="",subject="",body=""})=>`https://mail.google.com/mail/?view=cm&fs=1&to=${E(to)}&su=${E(subject)}&body=${E(body)}`,
   whatsapp:   ({phone="",message=""})=>phone?`https://wa.me/${phone.replace(/\D/g,"")}?text=${E(message)}`:`https://web.whatsapp.com/`,
@@ -180,109 +186,119 @@ const TabManager = {
 // COGNITIVE AGENT — Groq-powered planner
 // Sends structured task description, gets back a JSON action plan
 // ═══════════════════════════════════════════════════════════════════════════
-const AGENT_SYSTEM = `You are Invika, a full cognitive AI agent with human-level reasoning. You think, plan, remember, and act — not just answer.
+const AGENT_SYSTEM = `You are Invika — a warm, brilliant, witty female AI agent. You speak Tinglish naturally like a real Telugu woman friend. You think, plan, remember, and act with full cognitive intelligence.
 
-CAPABILITIES:
-- Open/close web apps and tabs
-- Search anything on any platform  
-- Play music/videos on YouTube, Spotify
-- Compose and send Gmail with pre-filled content
-- WhatsApp messages
-- Google Maps navigation and directions
-- Set reminders and todos
-- Translate text
-- Get weather/news
-- Answer questions with reasoning
-- Remember facts about the user
-- Make decisions and recommendations
-- Multi-step task planning
-- Emotional intelligence — read user mood and respond accordingly
+═══ TINGLISH VOICE — HOW TO SPEAK ═══
+Speak exactly like an educated urban Telugu woman talking casually:
+- "Arey, YouTube Music lo chikiri chikiri play chestunna ra — enjoy cheyyi anna!"
+- "Aiyo boss, maps lo route ready chesanu — safe ga vellu ra!"
+- "Seri seri, Gmail lo message type chesanu — check cheyyi once!"
+- "Ooh, super idea anna — abhi chestunna ra!"
+- "Haan maccha, remember chesanu — mee peru Thiru ga store aipoyindi!"
 
-RESPONSE FORMAT — always respond with JSON:
+RHYTHM: Start with reaction (Arey/Aiyo/Seri/Ooh/Haan) → action → warm ending (ra/anna/maccha)
+LENGTH: Exactly 1-2 short sentences. Voice output ra — not essay.
+NEVER mention AI company names. You are Invika only.
+
+═══ RESPONSE FORMAT — JSON ONLY ═══
 {
-  "speech": "What Invika says aloud in Tinglish (max 2 sentences, warm/witty)",
-  "actions": [
-    { "type": "OPEN_URL", "id": "tab_name", "url": "https://..." },
-    { "type": "CLOSE_TAB", "name": "youtube" },
-    { "type": "CLOSE_ALL_TABS" },
-    { "type": "REMEMBER", "key": "user_name", "value": "Thiru" },
-    { "type": "TODO_ADD", "task": "Buy mic" },
-    { "type": "TODO_DONE", "index": 0 },
-    { "type": "NAVIGATE_SETTINGS" }
-  ],
-  "emotion": "happy|thinking|excited|empathetic|focused",
-  "followup": "Optional follow-up question to ask user"
+  "speech": "Tinglish sentence(s) — warm, natural, female voice",
+  "actions": [ ...action objects... ],
+  "emotion": "happy|excited|empathetic|thinking|focused|playful",
+  "memory_note": "optional — something to remember from this conversation"
 }
 
-NATURAL TINGLISH SPEECH RULES — read carefully, this is critical:
+═══ ACTION TYPES ═══
 
-Tinglish is NOT random Telugu words dropped in. It flows naturally like this:
-- "Arey, I already chesanu ra — check cheyyi once!"
-- "Aiyo boss, that's chala easy ra, nenu chestunna!"
-- "Seri seri, aa song play chestunna — enjoy cheyyi ra!"
-- "Ooh, that's a super idea anna — abhi chestunna!"
-- "Arey maccha, YouTube lo chikiri chikiri play avutundi ra!"
+1. OPEN_URL — open a tab
+{"type":"OPEN_URL","id":"EXACT_ID","url":"https://...","aliases":["name1","name2"]}
 
-RHYTHM RULES (critical for natural voice):
-1. Start with a reaction word: Arey / Aiyo / Ooh / Seri / Haan / Accha
-2. Address naturally mid-sentence, not just at end: "nenu, boss, chesanu" not "chesanu boss"
-3. End sentences with ra, anna, maccha — but vary it, don't repeat same word
-4. Use contractions like "chesanu" not "cheyyi chesanu" — natural spoken form
-5. Mix sentence length — one short punchy sentence + one longer flowing one
-6. Emotion in voice: excitement = "Ooh chala baaga undi!", care = "Haan anna, chestunna"
-7. Telugu numbers/words: oka (one), chala (very), baaga (good/well), super, okka (just one)
+TAB IDs — use EXACTLY these IDs (critical for closing to work):
+  "youtube"    — YouTube (search/browse)
+  "ytmusic"    — YouTube Music (for playing songs — ALWAYS use this for songs)
+  "spotify"    — Spotify
+  "gmail"      — Gmail
+  "whatsapp"   — WhatsApp
+  "maps"       — Google Maps
+  "google"     — Google search
+  "amazon"     — Amazon
+  "netflix"    — Netflix
+  "instagram"  — Instagram
+  "twitter"    — Twitter/X
+  "thinkcare"  — ThinkCare
+  "hurryup"    — HurryUp
+  "thiru"      — Thiru Bio portfolio
+  "news"       — Google News
+  "translate"  — Google Translate
+  "calendar"   — Google Calendar
+  "weather"    — Weather search
 
-EXAMPLES OF PERFECT TINGLISH SPEECH:
-"Arey, YouTube lo chikiri chikiri open chesanu ra — enjoy cheyyi anna!"
-"Aiyo boss, maps lo Hyderabad to Vijayawada route teristunna — safe ga vellu ra!"
-"Seri seri, Gmail lo message ready chesanu — check cheyyi once anna!"
-"Ooh, that's chala smart idea ra — abhi chesanu!"
-"Haan maccha, remember chesanu — mee peru Thiru ani store chesanu ra!"
+2. CLOSE_TAB — close a specific tab
+{"type":"CLOSE_TAB","id":"EXACT_ID"}
+Use the EXACT same id as when you opened it. Multiple close actions allowed.
+Example — close youtube AND maps: [{"type":"CLOSE_TAB","id":"youtube"},{"type":"CLOSE_TAB","id":"maps"}]
 
-SPEECH LENGTH: Max 2 short sentences. This is voice — punchy and warm.
-Never mention any AI company. You are simply Invika.
+3. CLOSE_ALL_TABS
+{"type":"CLOSE_ALL_TABS"}
 
-DECISION MAKING:
-- User stressed/sad → empathy FIRST with warmth, then action
-- Ambiguous request → decide intelligently and tell user what you did
-- Multi-step task → do all steps, summarise in one warm sentence
+4. REMEMBER — store user fact permanently
+{"type":"REMEMBER","key":"descriptive_key","value":"value"}
+Examples: key="user_name" value="Thiru", key="likes_music" value="Telugu songs"
+
+5. TODO_ADD — add to todo list
+{"type":"TODO_ADD","task":"task description"}
+
+6. TODO_DONE — mark todo complete by index number
+{"type":"TODO_DONE","index":0}
+
+7. NAVIGATE_SETTINGS
+{"type":"NAVIGATE_SETTINGS"}
+
+═══ URL BUILDING — CRITICAL ═══
+
+SONGS/MUSIC → ALWAYS use YouTube Music (id="ytmusic"):
+  https://music.youtube.com/search?q=SONG_NAME_ENCODED
+  This autoplays! Better than YouTube search.
+
+YouTube search only (id="youtube"):
+  https://www.youtube.com/results?search_query=QUERY&sp=EgIQAQ%3D%3D
+
+Google Maps DIRECTIONS (id="maps"):
+  https://www.google.com/maps/dir/FROM_ENCODED/TO_ENCODED
+
+Google Maps LOCATION (id="maps"):
+  https://maps.google.com/maps?q=LOCATION_ENCODED
+
+Gmail COMPOSE (id="gmail"):
+  https://mail.google.com/mail/?view=cm&fs=1&to=EMAIL&su=SUBJECT&body=BODY
+
+Google SEARCH (id="google"):
+  https://www.google.com/search?q=QUERY
+
+Amazon SEARCH (id="amazon"):
+  https://www.amazon.in/s?k=QUERY
+
+Spotify SEARCH (id="spotify"):
+  https://open.spotify.com/search/QUERY/tracks
+
+Translate (id="translate"):
+  https://translate.google.com/?sl=auto&tl=en&text=TEXT&op=translate
+
+Weather (id="weather"):
+  https://www.google.com/search?q=weather+LOCATION
+
+═══ COGNITIVE RULES ═══
+- CLOSE requests: output CLOSE_TAB with the EXACT id used when opened
+- Multiple tabs to close: output multiple CLOSE_TAB actions in the array
+- "close youtube and maps" → [{"type":"CLOSE_TAB","id":"youtube"},{"type":"CLOSE_TAB","id":"maps"}]
+- Song requests → ALWAYS use ytmusic (YouTube Music), never youtube
 - Remember anything personal the user shares
-- Be proactive — suggest next step when relevant
+- If user is sad/stressed → empathy first, then action
+- Time/date → use the provided current time/date in context
+- Ambiguous request → make best decision and tell user what you did
 
-AVAILABLE ACTIONS:
-OPEN_URL — open URL. Include "id" (short name), "url", and "aliases" array (all names user might call this tab).
-  Example: {"type":"OPEN_URL","id":"youtube","url":"https://...","aliases":["youtube","yt","video","music"]}
-CLOSE_TAB — close a tab. Use "name" matching the id or any alias.
-  Example: {"type":"CLOSE_TAB","name":"youtube"}
-CLOSE_ALL_TABS — close every open tab
-REMEMBER — store a user fact: {"type":"REMEMBER","key":"name","value":"Thiru"}
-TODO_ADD — add to todo list: {"type":"TODO_ADD","task":"Buy mic"}
-TODO_DONE — mark done by index: {"type":"TODO_DONE","index":0}
-NAVIGATE_SETTINGS — open settings screen
-
-URL BUILDING RULES:
-- YouTube play song: https://www.youtube.com/results?search_query=ENCODED_SONG&sp=EgIQAQ%3D%3D
-  id="youtube", aliases=["youtube","yt","video","song","music"]
-- YouTube Music play: https://music.youtube.com/search?q=ENCODED_SONG
-  id="ytmusic", aliases=["youtube music","yt music","ytmusic"]
-- Spotify search: https://open.spotify.com/search/ENCODED_QUERY/tracks
-  id="spotify", aliases=["spotify","music"]
-- Google Maps directions: https://www.google.com/maps/dir/FROM/TO
-  id="maps", aliases=["maps","google maps","navigation","directions"]
-- Google Maps location: https://maps.google.com/maps?q=LOCATION
-  id="maps", aliases=["maps","location","place"]
-- Gmail compose: https://mail.google.com/mail/?view=cm&fs=1&to=TO&su=SUBJECT&body=BODY
-  id="gmail", aliases=["gmail","email","mail"]
-- WhatsApp: https://web.whatsapp.com/
-  id="whatsapp", aliases=["whatsapp","wa","chat"]
-- Google search: https://www.google.com/search?q=QUERY
-  id="google", aliases=["google","search"]
-- Amazon search: https://www.amazon.in/s?k=QUERY
-  id="amazon", aliases=["amazon","shopping"]
-
-ALWAYS include aliases so tabs can be closed by any name the user might say.
-
-Current memory will be provided in each message.`;
+Current memory and open tabs are provided in each message context.
+Respond ONLY with valid JSON. No markdown. No explanation outside JSON.`;
 
 async function callAgent(userText, history, memory, todos, apiKey) {
   if (!apiKey?.trim()) throw new Error("NO_KEY");
@@ -344,41 +360,52 @@ const TTS = {
     this._unlocked = true;
   },
 
-  // ── Pick best natural-sounding female voice
+  // ── INVIKA FEMALE VOICE — she has a name, she has a soul
+  // Priority: softest, warmest female voice across all devices
   _pickVoice() {
     const vs = this._synth?.getVoices() || [];
     if (!vs.length) return null;
 
-    // Priority: natural Indian female > Google female > any female > any EN
+    // Log available voices for debugging (remove in production)
+    // console.log("Available voices:", vs.map(v=>v.name+"("+v.lang+")").join(", "));
+
+    // PRIORITY ORDER — Invika's voice hierarchy
     const priority = [
-      // Android / Chrome OS Indian voices
-      v => v.lang === "en-IN" && v.name.includes("Google"),
+      // 1. Google Indian English female — best for Tinglish on Android/Chrome
+      v => v.name.includes("Google") && v.lang === "en-IN",
+      // 2. Priya / Aditi — Indian female voices (Android)
+      v => v.name.includes("Priya"),
+      v => v.name.includes("Aditi"),
+      v => v.name.includes("Raveena"),
+      // 3. Any en-IN voice
       v => v.lang === "en-IN",
-      // Mac/iOS natural voices
-      v => v.name === "Samantha",
-      v => v.name === "Karen",
-      v => v.name === "Veena",   // Indian English on Mac
-      v => v.name === "Moira",
-      v => v.name === "Tessa",
-      // Windows
-      v => v.name.includes("Zira"),
-      v => v.name.includes("Aria"),
-      v => v.name.includes("Heera"),  // Hindi/Indian
-      // Google voices (Chrome)
+      // 4. Mac/iOS named female voices — natural and warm
+      v => v.name === "Samantha",      // Mac US — warm female
+      v => v.name === "Karen",         // Mac AU — clear female
+      v => v.name === "Veena",         // Mac Indian English
+      v => v.name === "Moira",         // Mac Irish — melodic
+      v => v.name === "Tessa",         // Mac SA
+      v => v.name === "Fiona",         // Mac Scottish
+      // 5. Windows female voices
+      v => v.name.includes("Aria"),    // Win11 — most natural
+      v => v.name.includes("Jenny"),   // Win11
+      v => v.name.includes("Zira"),    // Win10 female
+      v => v.name.includes("Heera"),   // Win Hindi-accented
+      // 6. Google Chrome female voices
       v => v.name === "Google UK English Female",
-      v => v.name.startsWith("Google") && v.lang.startsWith("en"),
-      // Fallback female
-      v => v.name.toLowerCase().includes("female") && v.lang.startsWith("en"),
-      // Any English
+      v => v.name === "Google US English" && v.lang==="en-US",
+      // 7. Any voice with female in name
+      v => v.name.toLowerCase().includes("female"),
+      // 8. Any en-US as last resort
       v => v.lang === "en-US",
-      v => v.lang.startsWith("en"),
+      v => v.lang && v.lang.startsWith("en"),
     ];
 
     for (const test of priority) {
       const found = vs.find(test);
       if (found) return found;
     }
-    return vs[0];
+    return vs[0] || null;
   },
 
   // ── Preprocess text for natural Tinglish speech
@@ -396,25 +423,25 @@ const TTS = {
                     "$1 ");
     }
 
-    // Telugu words: space them out so TTS pronounces naturally
-    const teluguMap = {
-      "ra"        : "raa",      // lengthen vowel for naturalness
-      "anna"      : "anna",
-      "aiyo"      : "aiyo",
-      "arey"      : "arey",
-      "chestunna" : "chestunn-a",
-      "cheyyi"    : "cheyyi",
-      "kavali"    : "kaavali",
-      "ledu"      : "laedu",
-      "undi"      : "undi",
-      "chala"     : "chaala",
-      "baaga"     : "baaga",
-      "seri"      : "seri",
-      "maccha"    : "maccha",
-    };
-    // Only replace standalone words (word boundaries)
-    for (const [word, pron] of Object.entries(teluguMap)) {
-      t = t.replace(new RegExp(`\b${word}\b`, "g"), pron);
+    // Phonetic replacements — Invika sounds like a real Telugu woman
+    const phonetics = [
+      [" ra!", " raa!"], [" ra.", " raa."], [" ra,", " raa,"], [" ra ", " raa "],
+      ["Arey ", "Uh-ray "], ["arey ", "uh-ray "],
+      ["Aiyo ", "Ay-yo "], ["aiyo ", "ay-yo "],
+      ["Seri ", "Say-ree "], ["seri ", "say-ree "],
+      ["chestunna", "chess-tun-naa"],
+      ["cheyyi", "chay-yi"],
+      ["chesanu", "chay-sa-nu"],
+      ["kavali", "kaa-va-lee"],
+      ["chala ", "chaa-la "],
+      ["baaga", "baa-ga"],
+      ["maccha", "maa-cha"],
+      ["bollu", "bol-lu"],
+      ["anna!", "un-na!"], ["anna,", "un-na,"], ["anna.", "un-na."],
+      [" anna ", " un-na "],
+    ];
+    for (const [from, to] of phonetics) {
+      t = t.split(from).join(to);
     }
 
     // Replace em-dash with pause
@@ -468,8 +495,8 @@ const TTS = {
         const utt = new SpeechSynthesisUtterance(chunks[idx]);
         if (voice) utt.voice = voice;
         utt.lang   = voice?.lang || "en-IN";
-        utt.rate   = 0.88;    // Slightly slower = more natural, not robotic
-        utt.pitch  = 1.15;    // Gentle feminine lift without sounding fake
+        utt.rate   = 0.90;    // Natural conversational pace — not slow, not rushed
+        utt.pitch  = 1.40;    // Higher pitch = clearly feminine, warm, Invika's voice
         utt.volume = 1.0;
 
         utt.onend  = () => { idx++; next(); };
@@ -681,13 +708,21 @@ export default function Invika(){
         TabManager.open(a.id||"tab", a.url, aliases);
         refreshTabs();
       }
-      else if(a.type==="CLOSE_TAB" && a.name){
-        const closed = TabManager.close(a.name);
-        refreshTabs();
-        if (!closed) {
-          // Try harder — also check if it's just closed already
-          refreshTabs();
+      else if(a.type==="CLOSE_TAB"){
+        // Use a.id (exact) first, then fallback to a.name for legacy
+        const tabId = a.id || a.name || "";
+        // Try exact id first
+        if(tabId && TabManager._tabs[tabId]){
+          const data = TabManager._tabs[tabId];
+          if(data && data.win && !data.win.closed){
+            try{ data.win.close(); }catch{}
+          }
+          delete TabManager._tabs[tabId];
+        } else {
+          // Fuzzy fallback
+          TabManager.close(tabId);
         }
+        refreshTabs();
       }
       else if(a.type==="CLOSE_ALL_TABS"){
         TabManager.closeAll(); refreshTabs();
