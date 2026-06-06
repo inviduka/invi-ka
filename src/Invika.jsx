@@ -819,11 +819,11 @@ export default function Invika(){
 
         <Sec label="Groq API Key 🆓 AI Brain (Free)">
           <div style={{fontSize:12,color:"#555",lineHeight:1.85,background:"rgba(0,229,160,0.04)",border:"1px solid rgba(0,229,160,0.1)",borderRadius:9,padding:"11px 13px",marginBottom:10}}>
-            🆓 <b style={{color:"#00e5a0"}}>100% FREE!</b> <b style={{color:"#aaa"}}>console.groq.com</b> → Sign in → API Keys → Create → paste ra.
+            🆓 <b style={{color:"#00e5a0"}}>100% FREE!</b> <b style={{color:"#aaa"}}>console.groq.com</b> → Sign in → API Keys → Create → paste .
           </div>
           <input style={{...S.inp,background:settings.apiKey?"rgba(0,229,160,0.05)":"rgba(255,100,100,0.06)",border:settings.apiKey?"1px solid rgba(0,229,160,0.25)":"1px solid rgba(255,100,100,0.3)",fontFamily:"monospace",fontSize:12}}
             type="password" placeholder="gsk_... paste cheyyi ra" value={settings.apiKey||""} onChange={e=>saveSetting({apiKey:e.target.value})}/>
-          <div style={{fontSize:11,marginTop:6,color:settings.apiKey?"#00e5a0":"#ff7070"}}>{settings.apiKey?"✅ Groq ready ra!":"⚠️ Groq key ledu ra!"}</div>
+          <div style={{fontSize:11,marginTop:6,color:settings.apiKey?"#00e5a0":"#ff7070"}}>{settings.apiKey?"✅ Groq ready!":"⚠️ Groq key ledu!"}</div>
         </Sec>
 
         <Sec label="ElevenLabs Voice Key 🎙️ Invika's Real Girl Voice">
@@ -848,7 +848,7 @@ export default function Invika(){
                 <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid rgba(255,255,255,0.04)",fontSize:12}}>
                   <span style={{color:"#666"}}>{k}</span><span style={{color:"#bbb"}}>{v}</span>
                 </div>))
-            :<div style={{fontSize:12,color:"#444"}}>Emi ledu — mee gurinchi cheppindi remember chestundi ra!</div>}
+            :<div style={{fontSize:12,color:"#444"}}>Mee gurinchi cheppindi remember chestundi !</div>}
         </Sec>
 
         <Sec label="Groq Key Expiry Alert">
