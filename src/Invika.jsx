@@ -228,38 +228,69 @@ const TTS = {
     }
   },
 
-  // ── Browser fallback — picks best available female voice
+  // ── Browser fallback — guaranteed female voice with highest possible pitch
+  // Strategy: load ALL voices, score them, pick highest-scoring female
   _browser(text, cb) {
     if (!this._synth) { cb?.(); return; }
     this._synth.cancel();
+
     const go = () => {
       const vs = this._synth.getVoices();
-      // Ranked female voice search — most reliable female voices first
-      const tests = [
-        v => v.name.includes("Google") && v.lang==="en-IN",
-        v => v.name.includes("Priya"),
-        v => v.name.includes("Aditi"),
-        v => v.name.includes("Raveena"),
-        v => v.lang==="en-IN",
-        v => v.name==="Samantha",
-        v => v.name==="Karen",
-        v => v.name==="Veena",
-        v => v.name==="Tessa",
-        v => v.name.includes("Aria"),
-        v => v.name.includes("Jenny"),
-        v => v.name.includes("Zira"),
-        v => v.name==="Google UK English Female",
-        v => v.name.toLowerCase().includes("female"),
-        v => v.lang==="en-US",
-      ];
-      let voice = null;
-      for (const t of tests) { voice=vs.find(t); if(voice) break; }
 
-      // Chunk for Android (cuts off at ~160 chars)
-      const chunks = text.length<=160 ? [text]
+      // Score every voice — higher = more likely female & natural
+      const score = v => {
+        let s = 0;
+        const n = v.name.toLowerCase();
+        const l = (v.lang||"").toLowerCase();
+        // Strongly prefer known female voices
+        if (n.includes("priya"))   s+=100;
+        if (n.includes("aditi"))   s+=100;
+        if (n.includes("raveena")) s+=95;
+        if (n.includes("veena"))   s+=95;   // Indian English Mac
+        if (n.includes("heera"))   s+=90;   // Hindi Indian
+        if (n.includes("samantha"))s+=90;   // Mac US female
+        if (n.includes("karen"))   s+=88;   // Mac AU female
+        if (n.includes("tessa"))   s+=85;
+        if (n.includes("moira"))   s+=85;
+        if (n.includes("fiona"))   s+=82;
+        if (n.includes("aria"))    s+=85;   // Win11 female
+        if (n.includes("jenny"))   s+=83;   // Win11 female
+        if (n.includes("zira"))    s+=80;   // Win10 female
+        if (n.includes("female"))  s+=75;
+        if (n.includes("google uk english female")) s+=92;
+        if (n.includes("google us english"))        s+=70;
+        // Prefer Indian English locale
+        if (l==="en-in")           s+=30;
+        if (l.startsWith("en"))    s+=10;
+        // Penalise known male voices hard
+        if (n.includes("david"))   s-=200;
+        if (n.includes("mark"))    s-=200;
+        if (n.includes("daniel"))  s-=200;
+        if (n.includes("alex"))    s-=200;
+        if (n.includes("ravi"))    s-=150;  // Indian male
+        if (n.includes("george"))  s-=200;
+        if (n.includes("fred"))    s-=200;
+        if (n.includes("james"))   s-=200;
+        if (n.includes("paul"))    s-=200;
+        if (n.includes("thomas"))  s-=200;
+        if (n.includes("arthur"))  s-=200;
+        // Prefer local voices (network voices fail on mobile)
+        if (v.localService===true) s+=5;
+        return s;
+      };
+
+      // Sort all voices by score and pick the best
+      const ranked = [...vs].sort((a,b)=>score(b)-score(a));
+      const voice  = ranked[0] || null;
+
+      // Debug: log chosen voice
+      if (voice) console.log(`[Invika Voice] ${voice.name} (${voice.lang}) score=${score(voice)}`);
+
+      // Chunk text for Android (cuts off after ~150 chars)
+      const chunks = text.length<=150 ? [text]
         : (text.match(/[^.!?,]+[.!?,]*/g)||[text]).reduce((acc,s)=>{
-            const last = acc[acc.length-1]||"";
-            if((last+s).length>150 && last) acc.push(s);
+            const last=acc[acc.length-1]||"";
+            if((last+s).length>140 && last) acc.push(s);
             else acc[acc.length-1]=last+s;
             return acc;
           },[""]).filter(Boolean);
@@ -270,23 +301,24 @@ const TTS = {
         const u=new SpeechSynthesisUtterance(chunks[idx]);
         if(voice) u.voice=voice;
         u.lang   = voice?.lang||"en-IN";
-        u.rate   = 0.88;
-        u.pitch  = 1.6;   // Maximum pitch for female sound on browser TTS
+        u.rate   = 0.87;   // Slightly slower = warmer, more natural
+        u.pitch  = 1.7;    // Max pitch boost — guarantees female sound even on neutral voices
         u.volume = 1.0;
         u.onend  = ()=>{idx++;next();};
         u.onerror= ()=>{idx++;next();};
         this._synth.speak(u);
-        // Android Chrome pauses bug — force resume
-        [100,500,1200,2500].forEach(ms=>
+        // Android Chrome self-pause bug — force resume at multiple intervals
+        [80,300,700,1500,3000].forEach(ms=>
           setTimeout(()=>{if(this._synth?.paused)this._synth.resume();},ms)
         );
       };
       next();
     };
+
     if(!this._synth.getVoices().length){
       const h=()=>{this._synth.removeEventListener("voiceschanged",h);go();};
       this._synth.addEventListener("voiceschanged",h);
-      setTimeout(go,600);
+      setTimeout(go,500); // fallback if event never fires
     } else go();
   },
 
@@ -813,56 +845,51 @@ export default function Invika(){
         <span style={{width:56}}/>
       </div>
       <div style={S.scroll}>
+
+        {/* Name */}
         <Sec label="Your Name">
-          <input style={S.inp} placeholder="Mee peru — Invika remember chestundi" value={settings.userName} onChange={e=>saveSetting({userName:e.target.value})}/>
+          <input style={S.inp} placeholder="Enter your name" value={settings.userName}
+            onChange={e=>saveSetting({userName:e.target.value})}/>
         </Sec>
 
-        <Sec label="Groq API Key 🆓 AI Brain (Free)">
-          <div style={{fontSize:12,color:"#555",lineHeight:1.85,background:"rgba(0,229,160,0.04)",border:"1px solid rgba(0,229,160,0.1)",borderRadius:9,padding:"11px 13px",marginBottom:10}}>
-            🆓 <b style={{color:"#00e5a0"}}>100% FREE!</b> <b style={{color:"#aaa"}}>console.groq.com</b> → Sign in → API Keys → Create → paste .
+        {/* Groq */}
+        <Sec label="Groq API Key — AI Brain">
+          <div style={{fontSize:11,color:"#555",marginBottom:8}}>
+            Free at <b style={{color:"#aaa"}}>console.groq.com</b> → API Keys → Create Key
           </div>
-          <input style={{...S.inp,background:settings.apiKey?"rgba(0,229,160,0.05)":"rgba(255,100,100,0.06)",border:settings.apiKey?"1px solid rgba(0,229,160,0.25)":"1px solid rgba(255,100,100,0.3)",fontFamily:"monospace",fontSize:12}}
-            type="password" placeholder="gsk_... paste cheyyi ra" value={settings.apiKey||""} onChange={e=>saveSetting({apiKey:e.target.value})}/>
-          <div style={{fontSize:11,marginTop:6,color:settings.apiKey?"#00e5a0":"#ff7070"}}>{settings.apiKey?"✅ Groq ready!":"⚠️ Groq key ledu!"}</div>
-        </Sec>
-
-        <Sec label="ElevenLabs Voice Key 🎙️ Invika's Real Girl Voice">
-          <div style={{fontSize:12,color:"#555",lineHeight:1.85,background:"rgba(0,114,255,0.04)",border:"1px solid rgba(0,114,255,0.12)",borderRadius:9,padding:"11px 13px",marginBottom:10}}>
-            <b style={{color:"#6699ff"}}>🎙️ Invika's real Indian girl voice — Deepa!</b><br/>
-            <span style={{color:"#555"}}>Free: 10,000 chars/month (plenty for daily use ra)</span><br/>
-            <span style={{color:"#444",fontSize:11}}>1. <b style={{color:"#aaa"}}>elevenlabs.io</b> → Sign up free (Google login)</span><br/>
-            <span style={{color:"#444",fontSize:11}}>2. Profile → API Key → copy</span><br/>
-            <span style={{color:"#444",fontSize:11}}>3. Paste below → Invika sounds like a real Telugu girl! 💙</span><br/>
-            <span style={{color:"#333",fontSize:10}}>Without this: browser voice used (may be male on some phones)</span>
-          </div>
-          <input style={{...S.inp,background:settings.elevenKey?"rgba(0,114,255,0.06)":"rgba(255,255,255,0.03)",border:settings.elevenKey?"1px solid rgba(0,114,255,0.35)":"1px solid rgba(255,255,255,0.08)",fontFamily:"monospace",fontSize:12}}
-            type="password" placeholder="sk_... ElevenLabs key paste cheyyi" value={settings.elevenKey||""} onChange={e=>saveSetting({elevenKey:e.target.value})}/>
-          <div style={{fontSize:11,marginTop:6,color:settings.elevenKey?"#6699ff":"#666"}}>
-            {settings.elevenKey?"✅ Deepa voice active — Invika sounds like a real girl ra! 🎙️":"💡 Add for authentic Indian female voice!"}
+          <input style={{...S.inp,fontFamily:"monospace",fontSize:12,
+            background:settings.apiKey?"rgba(0,229,160,0.05)":"rgba(255,80,80,0.05)",
+            border:settings.apiKey?"1px solid rgba(0,229,160,0.3)":"1px solid rgba(255,80,80,0.25)"}}
+            type="password" placeholder="gsk_..." value={settings.apiKey||""}
+            onChange={e=>saveSetting({apiKey:e.target.value})}/>
+          <div style={{fontSize:10,marginTop:5,color:settings.apiKey?"#00e5a0":"#ff6060"}}>
+            {settings.apiKey?"✅ Connected":"⚠️ Required"}
           </div>
         </Sec>
 
-        <Sec label="Memory — What Invika Knows">
-          {Object.keys(memory.facts||{}).length>0
-            ?Object.entries(memory.facts).map(([k,v])=>(
-                <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid rgba(255,255,255,0.04)",fontSize:12}}>
-                  <span style={{color:"#666"}}>{k}</span><span style={{color:"#bbb"}}>{v}</span>
-                </div>))
-            :<div style={{fontSize:12,color:"#444"}}>Mee gurinchi cheppindi remember chestundi !</div>}
-        </Sec>
-
-        <Sec label="Groq Key Expiry Alert">
-          <input style={S.inp} type="date" defaultValue={DB.getExpiry("groq")||""} onChange={e=>DB.setExpiry("groq",e.target.value)}/>
+        {/* ElevenLabs */}
+        <Sec label="ElevenLabs API Key — Invika's Voice">
+          <div style={{fontSize:11,color:"#555",marginBottom:8}}>
+            Free at <b style={{color:"#aaa"}}>elevenlabs.io</b> → Profile → API Key (10,000 chars/month free)
+          </div>
+          <input style={{...S.inp,fontFamily:"monospace",fontSize:12,
+            background:settings.elevenKey?"rgba(0,114,255,0.05)":"rgba(255,255,255,0.03)",
+            border:settings.elevenKey?"1px solid rgba(0,114,255,0.3)":"1px solid rgba(255,255,255,0.08)"}}
+            type="password" placeholder="sk_..." value={settings.elevenKey||""}
+            onChange={e=>saveSetting({elevenKey:e.target.value})}/>
+          <div style={{fontSize:10,marginTop:5,color:settings.elevenKey?"#6699ff":"#555"}}>
+            {settings.elevenKey?"✅ Deepa (Indian female voice) active":"💡 Optional — browser voice used without this"}
+          </div>
         </Sec>
 
         <div style={{padding:"0 20px 40px"}}>
           <button style={S.dangerBtn} onClick={()=>{
-            if(!confirm("Anni clear cheyyanaa?"))return;
+            if(!confirm("Clear all data and reset?"))return;
             localStorage.clear();setMsgs([]);setApps(DEFAULT_APPS);
             setMemory(DB.getMemory());setTodos([]);
             saveSetting({userName:"",apiKey:"",elevenKey:""});
-            notify("Done ra! Fresh start!");
-          }}>Clear All Memory & Data</button>
+            notify("Reset complete!");
+          }}>Reset All Data</button>
         </div>
       </div>
     </div>
